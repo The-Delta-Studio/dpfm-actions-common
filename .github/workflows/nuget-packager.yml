@@ -1,0 +1,46 @@
+name: Publish .NET packages to the GitHub NuGet feed
+
+on:
+  workflow_call:
+    inputs:
+      DOTNET_VERSION:
+        required: true
+        type: string
+        default: '6.0.x'
+      SOLUTION_NAME:
+        required: true
+        type: string
+      ORGANISATION_NAME:
+        required: true
+        type: string
+      TARGET_FEED:
+        required: true
+        type: string
+    secrets:
+      READ_PACKAGES_PAT:
+        required: true
+
+env:
+  NUGET_FEED: https://api.nuget.org/v3/index.json
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v2
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v3
+        with:
+          dotnet-version: ${{ inputs.DOTNET_VERSION }}
+      - name: Add internal package source
+        run: dotnet nuget add source --username ${{ inputs.ORGANISATION_NAME }} --password ${{ secrets.READ_PACKAGES_PAT }} --store-password-in-clear-text --name "github" "${{ inputs.TARGET_FEED }}/index.json"
+      - name: List sources
+        run: dotnet nuget list source
+      - name: Restore & Build
+        run: |
+          dotnet restore
+          dotnet build --no-restore
+      - name: Pack
+        run: dotnet pack ${{ inputs.SOLUTION_NAME }} --output nuget-packages --configuration Release --no-restore
+      - name: Push
+        run: dotnet nuget push "nuget-packages/*.nupkg" --api-key ${{ secrets.GITHUB_TOKEN }} --skip-duplicate --source "github"
